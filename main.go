@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -27,36 +29,60 @@ const verticalNormalChar string = "│"
 const verticalEndChar string = "└"
 const horizontalLine string = "──"
 
+// regex pattern
+const isSearchHiddenPathPattern string = `^\..*`
+
+var isSearchHiddenPathRegex *regexp.Regexp = regexp.MustCompile(isSearchHiddenPathPattern)
+
+// flag input
+var rootPath string = "."
+var isSearchHiddenPath bool = false
+
+func isHiddenPath(entryName string, isSearchHiddenPath bool) bool {
+	if isSearchHiddenPath {
+		return false
+	}
+
+	match := isSearchHiddenPathRegex.MatchString(entryName)
+
+	return match
+}
+
 func colorizeBlue(text string) string {
 	return fmt.Sprintf("%s%s%s", Blue, text, Reset)
 }
 
 func formatTreeLine(entry *FileEntry) string {
-	lineStr := ""
+	var strBuilder strings.Builder
 	for i := 0; i < entry.Depth; i++ {
 		if i == entry.Depth-1 {
 			// 현재 깊이일 경우
 			if entry.IsLast {
 				// 마지막일 경우 세로 마지막 문자사용
-				lineStr = lineStr + verticalEndChar
+				strBuilder.WriteString(verticalEndChar)
 			} else {
 				// 마지막이 아닌 경우 분기처리 문자사용
-				lineStr = lineStr + verticalBranchChar
+				strBuilder.WriteString(verticalBranchChar)
 			}
 		} else {
 			// 현재 깊이보다 상위 깊이면 세로선만 추가
-			lineStr = lineStr + verticalNormalChar + strings.Repeat(" ", indentWidth)
+			strBuilder.WriteString(verticalNormalChar)
+			strBuilder.WriteString(strings.Repeat(" ", indentWidth))
 		}
 	}
 
 	if entry.IsDir {
 		// 폴더의 경우 파란색 세팅
-		lineStr = lineStr + horizontalLine + " " + colorizeBlue(entry.Name)
+		strBuilder.WriteString(horizontalLine)
+		strBuilder.WriteString(" ")
+		strBuilder.WriteString(colorizeBlue(entry.Name))
 	} else {
-		lineStr = lineStr + horizontalLine + " " + entry.Name
+		strBuilder.WriteString(horizontalLine)
+		strBuilder.WriteString(" ")
+		strBuilder.WriteString(entry.Name)
 	}
 
-	return lineStr
+	return strBuilder.String()
 }
 
 func printTree(entry *FileEntry) {
@@ -74,28 +100,32 @@ func printTree(entry *FileEntry) {
 	}
 }
 
-func buildTree(dirPath string, parent *FileEntry) error {
+func buildTree(dirPath string, parent *FileEntry, isSearchHiddenPath bool) error {
 	// 전달받은 경로의 파일 혹은 폴더 확인
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return err
 	}
 
-	for idx, entry := range entries {
+	for _, entry := range entries {
 		// 현재 경로의 파일 혹은 폴더를 열기 위해 경로 세팅
 		entryPath := filepath.Join(dirPath, entry.Name())
+		// hidden path continue
+		if isHidden := isHiddenPath(entry.Name(), isSearchHiddenPath); isHidden {
+			continue
+		}
 		child := FileEntry{
 			Name:     entry.Name(),
 			Depth:    parent.Depth + 1,
 			Children: make([]FileEntry, 0),
 			IsDir:    false,
-			IsLast:   idx == len(entries)-1,
+			IsLast:   false,
 		}
 
 		if entry.IsDir() {
 			// 폴더일 경우 플래그 세팅 후 재귀 호출
 			child.IsDir = true
-			if err := buildTree(entryPath, &child); err != nil {
+			if err := buildTree(entryPath, &child, isSearchHiddenPath); err != nil {
 				return err
 			}
 		}
@@ -103,14 +133,28 @@ func buildTree(dirPath string, parent *FileEntry) error {
 		parent.Children = append(parent.Children, child)
 	}
 
+	// 마지막에 추가된 자식에 직접 세팅
+	if len(parent.Children) > 0 {
+		parent.Children[len(parent.Children)-1].IsLast = true
+	}
+
 	return nil
 }
 
+func initFlag() {
+	rootPathRef := flag.String("path", ".", "search root directory")
+	isSearchHiddenPathRef := flag.Bool("all", false, "search hidden path, default disable(false)")
+
+	flag.Parse()
+
+	rootPath = *rootPathRef
+	isSearchHiddenPath = *isSearchHiddenPathRef
+}
+
 func main() {
-	rootPath := "."
-	if len(os.Args) == 2 {
-		rootPath = os.Args[1]
-	}
+
+	// init flag
+	initFlag()
 
 	if _, err := os.Stat(rootPath); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -125,7 +169,7 @@ func main() {
 		Depth:    0,
 	}
 
-	if err := buildTree(rootPath, &root); err != nil {
+	if err := buildTree(rootPath, &root, isSearchHiddenPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
 		return
 	}
