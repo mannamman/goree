@@ -12,7 +12,7 @@ import (
 type FileEntry struct {
 	Name     string
 	IsDir    bool
-	Depth    int
+	Depth    uint
 	IsRoot   bool
 	IsLast   bool
 	Children []FileEntry
@@ -22,11 +22,12 @@ type Config struct {
 	RootPath           string
 	IsSearchHiddenPath bool
 	IgnoreDirArray     []string
+	MaxDepth           uint
 }
 
 const (
 	Reset              string = "\033[0m"
-	Blue               string = "\033[1;36m"
+	BoldCyan           string = "\033[1;36m"
 	indentWidth        int    = 3
 	verticalBranchChar string = "├"
 	verticalNormalChar string = "│"
@@ -38,13 +39,13 @@ func isHiddenPath(entryName string) bool {
 	return strings.HasPrefix(entryName, ".")
 }
 
-func colorizeBlue(text string) string {
-	return fmt.Sprintf("%s%s%s", Blue, text, Reset)
+func colorize(text string, color string) string {
+	return fmt.Sprintf("%s%s%s", color, text, Reset)
 }
 
 func formatTreeLine(entry *FileEntry) string {
 	var strBuilder strings.Builder
-	for i := 0; i < entry.Depth; i++ {
+	for i := uint(0); i < entry.Depth; i++ {
 		if i == entry.Depth-1 {
 			// 현재 깊이일 경우
 			if entry.IsLast {
@@ -65,7 +66,7 @@ func formatTreeLine(entry *FileEntry) string {
 		// 폴더의 경우 파란색 세팅
 		strBuilder.WriteString(horizontalLine)
 		strBuilder.WriteString(" ")
-		strBuilder.WriteString(colorizeBlue(entry.Name))
+		strBuilder.WriteString(colorize(entry.Name, BoldCyan))
 	} else {
 		strBuilder.WriteString(horizontalLine)
 		strBuilder.WriteString(" ")
@@ -78,7 +79,7 @@ func formatTreeLine(entry *FileEntry) string {
 func printTree(entry *FileEntry) {
 	if entry.IsRoot {
 		// 입력한 최상위 경로의 경우 색만 표기
-		fmt.Println(colorizeBlue(entry.Name))
+		fmt.Println(colorize(entry.Name, BoldCyan))
 	} else {
 		// 입력한 최상위 경로가 아니라면 깊이에 맞게 출력
 		fmt.Println(formatTreeLine(entry))
@@ -109,6 +110,10 @@ func buildTree(dirPath string, parent *FileEntry, cfg *Config) error {
 			if slices.Contains(cfg.IgnoreDirArray, entry.Name()) {
 				continue
 			}
+		}
+		// maxDepth값이 설정되었고, 부모의 깊이가 같거나 크면 탐색 종료
+		if cfg.MaxDepth > 0 && parent.Depth >= cfg.MaxDepth {
+			continue
 		}
 		child := FileEntry{
 			Name:     entry.Name(),
@@ -142,6 +147,7 @@ func initFlag() *Config {
 	// -all 만 사용시 bool의 경우 true로 세팅됨
 	isSearchHiddenPathRef := flag.Bool("all", false, "include hidden files (default: false)")
 	ignoreDirStringRef := flag.String("ignore", "", "comma-separated list of directories to ignore")
+	maxDepthRef := flag.Uint("depth", 0, "max search depth (0: unlimited)")
 
 	flag.Parse()
 
@@ -153,6 +159,7 @@ func initFlag() *Config {
 	if ignoreDirString != "" {
 		config.IgnoreDirArray = strings.Split(ignoreDirString, ",")
 	}
+	config.MaxDepth = *maxDepthRef
 
 	return &config
 }
