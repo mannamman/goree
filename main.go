@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -18,34 +18,24 @@ type FileEntry struct {
 	Children []FileEntry
 }
 
+type Config struct {
+	RootPath           string
+	IsSearchHiddenPath bool
+	IgnoreDirArray     []string
+}
+
 const (
-	Reset = "\033[0m"
-	Blue  = "\033[1;36m"
+	Reset              string = "\033[0m"
+	Blue               string = "\033[1;36m"
+	indentWidth        int    = 3
+	verticalBranchChar string = "├"
+	verticalNormalChar string = "│"
+	verticalEndChar    string = "└"
+	horizontalLine     string = "──"
 )
 
-const indentWidth int = 3
-const verticalBranchChar string = "├"
-const verticalNormalChar string = "│"
-const verticalEndChar string = "└"
-const horizontalLine string = "──"
-
-// regex pattern
-const isSearchHiddenPathPattern string = `^\..*`
-
-var isSearchHiddenPathRegex *regexp.Regexp = regexp.MustCompile(isSearchHiddenPathPattern)
-
-// flag input
-var rootPath string = "."
-var isSearchHiddenPath bool = false
-
-func isHiddenPath(entryName string, isSearchHiddenPath bool) bool {
-	if isSearchHiddenPath {
-		return false
-	}
-
-	match := isSearchHiddenPathRegex.MatchString(entryName)
-
-	return match
+func isHiddenPath(entryName string) bool {
+	return strings.HasPrefix(entryName, ".")
 }
 
 func colorizeBlue(text string) string {
@@ -88,7 +78,7 @@ func formatTreeLine(entry *FileEntry) string {
 func printTree(entry *FileEntry) {
 	if entry.IsRoot {
 		// 입력한 최상위 경로의 경우 색만 표기
-		fmt.Printf("%s\n", colorizeBlue(entry.Name))
+		fmt.Println(colorizeBlue(entry.Name))
 	} else {
 		// 입력한 최상위 경로가 아니라면 깊이에 맞게 출력
 		fmt.Println(formatTreeLine(entry))
@@ -100,7 +90,7 @@ func printTree(entry *FileEntry) {
 	}
 }
 
-func buildTree(dirPath string, parent *FileEntry, isSearchHiddenPath bool) error {
+func buildTree(dirPath string, parent *FileEntry, cfg *Config) error {
 	// 전달받은 경로의 파일 혹은 폴더 확인
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -110,9 +100,15 @@ func buildTree(dirPath string, parent *FileEntry, isSearchHiddenPath bool) error
 	for _, entry := range entries {
 		// 현재 경로의 파일 혹은 폴더를 열기 위해 경로 세팅
 		entryPath := filepath.Join(dirPath, entry.Name())
-		// hidden path continue
-		if isHidden := isHiddenPath(entry.Name(), isSearchHiddenPath); isHidden {
+		// 숨김 경로일 경우 건너뜀
+		if !cfg.IsSearchHiddenPath && isHiddenPath(entry.Name()) {
 			continue
+		}
+		// 무시할 폴더일 경우 건너뜀
+		if entry.IsDir() && len(cfg.IgnoreDirArray) > 0 {
+			if slices.Contains(cfg.IgnoreDirArray, entry.Name()) {
+				continue
+			}
 		}
 		child := FileEntry{
 			Name:     entry.Name(),
@@ -125,7 +121,7 @@ func buildTree(dirPath string, parent *FileEntry, isSearchHiddenPath bool) error
 		if entry.IsDir() {
 			// 폴더일 경우 플래그 세팅 후 재귀 호출
 			child.IsDir = true
-			if err := buildTree(entryPath, &child, isSearchHiddenPath); err != nil {
+			if err := buildTree(entryPath, &child, cfg); err != nil {
 				return err
 			}
 		}
@@ -141,35 +137,45 @@ func buildTree(dirPath string, parent *FileEntry, isSearchHiddenPath bool) error
 	return nil
 }
 
-func initFlag() {
-	rootPathRef := flag.String("path", ".", "search root directory")
-	isSearchHiddenPathRef := flag.Bool("all", false, "search hidden path, default disable(false)")
+func initFlag() *Config {
+	rootPathRef := flag.String("path", ".", "root directory to search")
+	// -all 만 사용시 bool의 경우 true로 세팅됨
+	isSearchHiddenPathRef := flag.Bool("all", false, "include hidden files (default: false)")
+	ignoreDirStringRef := flag.String("ignore", "", "comma-separated list of directories to ignore")
 
 	flag.Parse()
 
-	rootPath = *rootPathRef
-	isSearchHiddenPath = *isSearchHiddenPathRef
+	// 설정값 세팅
+	var config Config
+	config.RootPath = *rootPathRef
+	config.IsSearchHiddenPath = *isSearchHiddenPathRef
+	ignoreDirString := *ignoreDirStringRef
+	if ignoreDirString != "" {
+		config.IgnoreDirArray = strings.Split(ignoreDirString, ",")
+	}
+
+	return &config
 }
 
 func main() {
 
-	// init flag
-	initFlag()
+	// 플래그 초기화 및 설정값 로드
+	cfg := initFlag()
 
-	if _, err := os.Stat(rootPath); err != nil {
+	if _, err := os.Stat(cfg.RootPath); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return
 	}
 
 	root := FileEntry{
-		Name:     rootPath,
+		Name:     cfg.RootPath,
 		IsDir:    true,
 		Children: make([]FileEntry, 0),
 		IsRoot:   true,
 		Depth:    0,
 	}
 
-	if err := buildTree(rootPath, &root, isSearchHiddenPath); err != nil {
+	if err := buildTree(cfg.RootPath, &root, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err.Error())
 		return
 	}
