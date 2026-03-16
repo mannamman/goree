@@ -19,8 +19,11 @@ goree -all
 goree -ignore node_modules
 goree -ignore node_modules,.git
 
+# 최대 탐색 깊이 세팅
+goree -depth 2
+
 # 조합 예시
-goree -path /path/to/dir -all -ignore node_modules,.git
+goree -path /path/to/dir -all -ignore node_modules,.git -depth 3
 ```
 
 ## 빌드
@@ -57,8 +60,9 @@ GOOS=windows GOARCH=arm64 go build -o goree-arm64.exe
 |:---------:|-----------|----------|----------|------|
 | [x] | 숨김 파일/폴더 조회 선택 추가 (기본 숨김 파일/폴더 미조회) | 2026-03-13 | 2026-03-15 | |
 | [x] | 특정 폴더 탐색 거부 | 2026-03-13 | 2026-03-16 | |
-| [ ] | 최대 탐색 깊이 설정 | 2026-03-13 | | |
+| [x] | 최대 탐색 깊이 설정 | 2026-03-13 | 2026-03-16 | |
 | [ ] | 특정 내용의 파일 찾기 | 2026-03-16 | | |
+| [ ] | 파일 타입 색 지정하기 | 2026-03-16 | | |
 
 ---
 
