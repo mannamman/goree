@@ -10,13 +10,15 @@ import (
 )
 
 type FileEntry struct {
-	Name     string
-	IsDir    bool
-	Depth    uint
-	IsRoot   bool
-	IsLast   bool
-	Children []FileEntry
+	Name      string
+	Depth     uint
+	IsLast    bool
+	Children  []FileEntry
+	EntryType FileType
+	LinkDst   string
 }
+
+type FileType int
 
 type Config struct {
 	RootPath           string
@@ -25,9 +27,28 @@ type Config struct {
 	MaxDepth           uint
 }
 
+// color
 const (
-	Reset              string = "\033[0m"
-	BoldCyan           string = "\033[1;36m"
+	Reset    string = "\033[0m"
+	BoldCyan string = "\033[1;36m"
+	Red      string = "\033[31m"
+	Magenta  string = "\033[35m"
+	Yellow   string = "\033[33m"
+	Green    string = "\033[32m"
+)
+
+// fileType
+const (
+	FileTypeNone FileType = iota
+	FileTypeDir
+	FileTypeExec
+	FileTypePipe
+	FileTypeSymlink
+	FileTypeSocket
+)
+
+// line
+const (
 	indentWidth        int    = 3
 	verticalBranchChar string = "├"
 	verticalNormalChar string = "│"
@@ -40,6 +61,9 @@ func isHiddenPath(entryName string) bool {
 }
 
 func colorize(text string, color string) string {
+	if color == "" {
+		return text
+	}
 	return fmt.Sprintf("%s%s%s", color, text, Reset)
 }
 
@@ -62,22 +86,33 @@ func formatTreeLine(entry *FileEntry) string {
 		}
 	}
 
-	if entry.IsDir {
-		// 폴더의 경우 파란색 세팅
-		strBuilder.WriteString(horizontalLine)
-		strBuilder.WriteString(" ")
-		strBuilder.WriteString(colorize(entry.Name, BoldCyan))
-	} else {
-		strBuilder.WriteString(horizontalLine)
-		strBuilder.WriteString(" ")
-		strBuilder.WriteString(entry.Name)
+	color := ""
+	switch entry.EntryType {
+	case FileTypeDir:
+		color = BoldCyan
+	case FileTypeExec:
+		color = Red
+	case FileTypePipe:
+		color = Yellow
+	case FileTypeSymlink:
+		color = Magenta
+	case FileTypeSocket:
+		color = Green
+	}
+
+	strBuilder.WriteString(horizontalLine)
+	strBuilder.WriteString(" ")
+	strBuilder.WriteString(colorize(entry.Name, color))
+
+	if entry.EntryType == FileTypeSymlink {
+		strBuilder.WriteString(fmt.Sprintf(" -> %s", entry.LinkDst))
 	}
 
 	return strBuilder.String()
 }
 
 func printTree(entry *FileEntry) {
-	if entry.IsRoot {
+	if entry.Depth == 0 {
 		// 입력한 최상위 경로의 경우 색만 표기
 		fmt.Println(colorize(entry.Name, BoldCyan))
 	} else {
@@ -116,16 +151,42 @@ func buildTree(dirPath string, parent *FileEntry, cfg *Config) error {
 			continue
 		}
 		child := FileEntry{
-			Name:     entry.Name(),
-			Depth:    parent.Depth + 1,
-			Children: make([]FileEntry, 0),
-			IsDir:    false,
-			IsLast:   false,
+			Name:      entry.Name(),
+			Depth:     parent.Depth + 1,
+			Children:  make([]FileEntry, 0),
+			EntryType: FileTypeNone,
 		}
 
-		if entry.IsDir() {
+		info, err := os.Lstat(entryPath)
+		if err != nil {
+			return err
+		}
+
+		mode := info.Mode()
+		if mode&os.ModeSymlink != 0 {
+			// 심볼릭 링크
+			child.EntryType = FileTypeSymlink
+			dst, err := os.Readlink(entryPath)
+			if err != nil {
+				return err
+			}
+			child.LinkDst = dst
+		} else if mode&os.ModeDir != 0 {
+			// 폴더
+			child.EntryType = FileTypeDir
+		} else if mode.Perm()&0111 != 0 {
+			// 실행파일
+			child.EntryType = FileTypeExec
+		} else if mode&os.ModeNamedPipe != 0 {
+			// 파이프
+			child.EntryType = FileTypePipe
+		} else if mode&os.ModeSocket != 0 {
+			// 소켓
+			child.EntryType = FileTypeSocket
+		}
+
+		if child.EntryType == FileTypeDir {
 			// 폴더일 경우 플래그 세팅 후 재귀 호출
-			child.IsDir = true
 			if err := buildTree(entryPath, &child, cfg); err != nil {
 				return err
 			}
@@ -175,11 +236,10 @@ func main() {
 	}
 
 	root := FileEntry{
-		Name:     cfg.RootPath,
-		IsDir:    true,
-		Children: make([]FileEntry, 0),
-		IsRoot:   true,
-		Depth:    0,
+		Name:      cfg.RootPath,
+		EntryType: FileTypeDir,
+		Children:  make([]FileEntry, 0),
+		Depth:     0,
 	}
 
 	if err := buildTree(cfg.RootPath, &root, cfg); err != nil {
