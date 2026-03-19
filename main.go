@@ -67,62 +67,60 @@ func colorize(text string, color string) string {
 	return fmt.Sprintf("%s%s%s", color, text, Reset)
 }
 
-func formatTreeLine(entry *FileEntry) string {
-	var strBuilder strings.Builder
-	for i := uint(0); i < entry.Depth; i++ {
-		if i == entry.Depth-1 {
-			// 현재 깊이일 경우
-			if entry.IsLast {
-				// 마지막일 경우 세로 마지막 문자사용
-				strBuilder.WriteString(verticalEndChar)
-			} else {
-				// 마지막이 아닌 경우 분기처리 문자사용
-				strBuilder.WriteString(verticalBranchChar)
-			}
-		} else {
-			// 현재 깊이보다 상위 깊이면 세로선만 추가
-			strBuilder.WriteString(verticalNormalChar)
-			strBuilder.WriteString(strings.Repeat(" ", indentWidth))
-		}
-	}
+func printTree(entry *FileEntry, prefix string) {
+	nextPrefix := prefix
 
-	color := ""
-	switch entry.EntryType {
-	case FileTypeDir:
-		color = BoldCyan
-	case FileTypeExec:
-		color = Red
-	case FileTypePipe:
-		color = Yellow
-	case FileTypeSymlink:
-		color = Magenta
-	case FileTypeSocket:
-		color = Green
-	}
-
-	strBuilder.WriteString(horizontalLine)
-	strBuilder.WriteString(" ")
-	strBuilder.WriteString(colorize(entry.Name, color))
-
-	if entry.EntryType == FileTypeSymlink {
-		strBuilder.WriteString(fmt.Sprintf(" -> %s", entry.LinkDst))
-	}
-
-	return strBuilder.String()
-}
-
-func printTree(entry *FileEntry) {
 	if entry.Depth == 0 {
 		// 입력한 최상위 경로의 경우 색만 표기
 		fmt.Println(colorize(entry.Name, BoldCyan))
 	} else {
-		// 입력한 최상위 경로가 아니라면 깊이에 맞게 출력
-		fmt.Println(formatTreeLine(entry))
+		var strBuilder strings.Builder
+
+		// 현재 깊이일 경우
+		if entry.IsLast {
+			// 마지막일 경우 세로 마지막 문자사용
+			strBuilder.WriteString(verticalEndChar)
+		} else {
+			// 마지막이 아닌 경우 분기처리 문자사용
+			strBuilder.WriteString(verticalBranchChar)
+		}
+
+		var color string
+		switch entry.EntryType {
+		case FileTypeDir:
+			color = BoldCyan
+		case FileTypeExec:
+			color = Red
+		case FileTypePipe:
+			color = Yellow
+		case FileTypeSymlink:
+			color = Magenta
+		case FileTypeSocket:
+			color = Green
+		}
+
+		strBuilder.WriteString(horizontalLine)
+		strBuilder.WriteString(" ")
+		strBuilder.WriteString(colorize(entry.Name, color))
+
+		if entry.EntryType == FileTypeSymlink {
+			strBuilder.WriteString(fmt.Sprintf(" -> %s", entry.LinkDst))
+		}
+
+		if !entry.IsLast {
+			// 현재노드가 마지막이 아니라면 세로선 추가해서 자식에게 전달
+			nextPrefix += verticalNormalChar + strings.Repeat(" ", indentWidth)
+		} else {
+			// 현재노드가 마지막이 아니라면 빈 공간 자식에게 전달
+			nextPrefix += strings.Repeat(" ", indentWidth+1)
+		}
+
+		fmt.Println(prefix + strBuilder.String())
 	}
 
 	for _, child := range entry.Children {
 		// 자식 노드 순회하면서 출력
-		printTree(&child)
+		printTree(&child, nextPrefix)
 	}
 }
 
@@ -247,5 +245,5 @@ func main() {
 		return
 	}
 
-	printTree(&root)
+	printTree(&root, "")
 }
