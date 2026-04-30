@@ -62,6 +62,41 @@ const (
 	horizontalLine     string = "──"
 )
 
+func help() {
+	indent := 4
+	var strbuilder strings.Builder
+
+	strbuilder.WriteString("Usage mytree [flags1] [flags2] ...")
+	strbuilder.WriteString("\n\n")
+
+	strbuilder.WriteString("path:")
+	strbuilder.WriteRune('\n')
+	strbuilder.WriteString(strings.Repeat(" ", indent))
+	strbuilder.WriteString(" - Starting directory for the search (default: current directory)\n")
+
+	strbuilder.WriteString("all:")
+	strbuilder.WriteRune('\n')
+	strbuilder.WriteString(strings.Repeat(" ", indent))
+	strbuilder.WriteString(" - Include hidden files (default: false)\n")
+
+	strbuilder.WriteString("ignore:")
+	strbuilder.WriteRune('\n')
+	strbuilder.WriteString(strings.Repeat(" ", indent))
+	strbuilder.WriteString(" - Comma-separated list of directories to skip (default: allow all)\n")
+
+	strbuilder.WriteString("depth:")
+	strbuilder.WriteRune('\n')
+	strbuilder.WriteString(strings.Repeat(" ", indent))
+	strbuilder.WriteString(" - Maximum search depth (0: unlimited, default: 0)\n")
+
+	strbuilder.WriteString("dir:")
+	strbuilder.WriteRune('\n')
+	strbuilder.WriteString(strings.Repeat(" ", indent))
+	strbuilder.WriteString(" - Search directories only (default: false)\n")
+
+	fmt.Fprintln(os.Stderr, strbuilder.String())
+}
+
 func isHiddenPath(entryName string) bool {
 	return strings.HasPrefix(entryName, ".")
 }
@@ -221,6 +256,8 @@ func initFlag() *Config {
 	ignoreDirStringRef := flag.String("ignore", "", "comma-separated list of directories to ignore")
 	maxDepthRef := flag.Uint("depth", 0, "max search depth (0: unlimited)")
 	onlyDirRef := flag.Bool("dir", false, "show only directories (default: false)")
+
+	flag.Usage = help
 
 	flag.Parse()
 

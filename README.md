@@ -24,6 +24,9 @@ goree -depth 2
 
 # 조합 예시
 goree -path /path/to/dir -all -ignore node_modules,.git -depth 3
+
+# 도움말
+goree -h
 ```
 
 ## 빌드
@@ -64,6 +67,7 @@ GOOS=windows GOARCH=arm64 go build -o goree-arm64.exe
 | [-] | ~~특정 내용의 파일 찾기~~ | 2026-03-16 | 2026-03-19 | tree명령어와 어울리지 않는 것 같음 |
 | [x] | 파일 타입 색 지정하기 | 2026-03-16 | 2026-03-18 | |
 | [x] | 디렉토리만 조회 플래그 | 2026-03-19 | 2026-03-30 |  |
+| [x] | 플래그 설명 추가 | 2026-04-30 | 2026-04-30 |  |
 
 ---
 
